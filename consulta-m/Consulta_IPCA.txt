@@ -1,0 +1,29 @@
+let
+    // Obtém os dados do IPCA via API do Banco Central
+    Fonte = Json.Document(Web.Contents("https://api.bcb.gov.br/dados/serie/bcdata.sgs.433/dados?formato=json")),
+
+    // Converte os dados para tabela
+    Tabela = Table.FromRecords(Fonte),
+
+    // Converte as colunas para os tipos corretos
+    ColunasConvertidas = Table.TransformColumns(Tabela, {
+        {"valor", each Number.FromText(_), type number}, 
+        {"data", each Date.From(Text.End(_, 4) & "-" & Text.Start(_, 2) & "-01"), type date}
+    }),
+
+    // Cria uma coluna com o Ano
+    AdicionaAno = Table.AddColumn(ColunasConvertidas, "Ano", each Date.Year([data]), Int64.Type),
+
+    // Converte o IPCA para fator multiplicativo correto (dividido por 100)
+    FiltradoComFator = Table.AddColumn(AdicionaAno, "Fator", each 1 + ([valor] / 10000), type number),
+
+    // Calcula o IPCA acumulado por ano
+    Agrupado = Table.Group(FiltradoComFator, {"Ano"}, {
+        {"IPCA Acumulado", each (List.Product([Fator]) - 1) * 100, type number}
+    }),
+
+    // Retorna a tabela no formato desejado (ano | IPCA)
+    TabelaFinal = Table.SelectColumns(Agrupado, {"Ano", "IPCA Acumulado"})
+
+in
+    TabelaFinal
